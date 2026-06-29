@@ -56,66 +56,15 @@ if not shared.VapeDeveloper then
 	writefile('newvape/profiles/commit.txt', commit)
 end
 
--- Clean up any broken cached game files from old patches
-for _, pid in ipairs({ "6872274481", "6872265039", "8560631822", "8444591321" }) do
-	local path = 'newvape/games/' .. pid .. '.lua'
-	if isfile(path) then
-		local content = readfile(path)
-		if content:find("lplr:Kick = function") or content:find("lplr:Kick%(") then
-			delfile(path)
+-- Hook global loadstring to remove Bedwars kick from game files before they execute
+local oldLoadstring = loadstring
+loadstring = function(text, chunkname)
+	if type(text) == "string" and type(chunkname) == "string" then
+		if chunkname:find("6872274481") or chunkname:find("6872265039") or text:find("Bedwars") then
+			text = text:gsub("lplr:Kick%('Bedwars[^']-')", "")
 		end
 	end
+	return oldLoadstring(text, chunkname)
 end
-
--- Block Kick with Bedwars message using multiple methods
-local blocked = false
-local function blockKick(...)
-	if blocked then return end
-	blocked = true
-	local args = {...}
-	local msg = ""
-	for i = 1, #args do
-		if type(args[i]) == "string" then
-			msg = args[i]
-			break
-		end
-	end
-	if msg:find("Bedwars") then
-		return true
-	end
-	blocked = false
-	return false
-end
-
--- Method 1: hookmetamethod
-if hookmetamethod and getnamecallmethod then
-	local oldNamecall = hookmetamethod(game, "__namecall", function(self, ...)
-		if getnamecallmethod() == "Kick" and blockKick(...) then return end
-		return oldNamecall(self, ...)
-	end)
-end
-
--- Method 2: getrawmetatable (more reliable)
-if getrawmetatable and setreadonly and getnamecallmethod then
-	local mt = getrawmetatable(game)
-	local oldNamecall = mt.__namecall
-	setreadonly(mt, false)
-	mt.__namecall = function(...)
-		if getnamecallmethod() == "Kick" and blockKick(select(1, ...)) then return end
-		return oldNamecall(...)
-	end
-	setreadonly(mt, true)
-end
-
--- Method 3: Override Kick on LocalPlayer directly
-spawn(function()
-	while task.wait(0.5) do
-		local player = game:GetService("Players").LocalPlayer
-		if player then
-			player.Kick = function() end
-			break
-		end
-	end
-end)
 
 return loadstring(downloadFile('newvape/main.lua'), 'main')()
