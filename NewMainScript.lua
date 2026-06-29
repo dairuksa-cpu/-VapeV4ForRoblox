@@ -62,7 +62,10 @@ for _, pid in ipairs({ "6872274481", "6872265039", "8560631822", "8444591321" })
 	local path = 'newvape/games/' .. pid .. '.lua'
 	if isfile(path) then
 		local content = readfile(path)
-		local patched = content:gsub("lplr:Kick%('Bedwars[^']-'", "nil")
+		-- Fix old broken patch from previous version
+		local patched = content:gsub("lplr:Kick = function%(%) end", "nil")
+		-- Patch the actual kick call
+		patched = patched:gsub("lplr:Kick%('Bedwars[^']-'", "nil")
 		if patched ~= content then
 			writefile(path, patched)
 		end
