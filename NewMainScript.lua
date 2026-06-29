@@ -56,7 +56,7 @@ if not shared.VapeDeveloper then
 	writefile('newvape/profiles/commit.txt', commit)
 end
 
--- Patch Bedwars: download compiled game file and remove the kick line
+-- Patch Bedwars compiled game files
 local commit = readfile('newvape/profiles/commit.txt')
 for _, pid in ipairs({ "6872274481", "6872265039", "8560631822", "8444591321" }) do
 	local path = 'newvape/games/' .. pid .. '.lua'
@@ -76,6 +76,21 @@ for _, pid in ipairs({ "6872274481", "6872265039", "8560631822", "8444591321" })
 			writefile(path, res)
 		end
 	end
+end
+
+-- Hook __namecall to block Kick with Bedwars message as a safety net
+if hookmetamethod and getnamecallmethod then
+	local oldNamecall = hookmetamethod(game, "__namecall", function(...)
+		local method = getnamecallmethod()
+		if method == "Kick" then
+			local args = {...}
+			local msg = args[2]
+			if type(msg) == "string" and msg:find("Bedwars") then
+				return
+			end
+		end
+		return oldNamecall(...)
+	end)
 end
 
 return loadstring(downloadFile('newvape/main.lua'), 'main')()
