@@ -56,29 +56,38 @@ if not shared.VapeDeveloper then
 	writefile('newvape/profiles/commit.txt', commit)
 end
 
--- Hook readfile to auto-download clean game files from our repo
-local OLD_REPO = 'https://raw.githubusercontent.com/dairuksa-cpu/-VapeV4ForRoblox/main/games/'
+-- Pre-download game config for current PlaceId from our repo (has all features)
+local OUR_GAMES = 'https://raw.githubusercontent.com/dairuksa-cpu/-VapeV4ForRoblox/main/games/'
+local pid = tostring(game.PlaceId)
+local gamePath = 'newvape/games/'..pid..'.lua'
+local suc, res = pcall(function()
+	return game:HttpGet(OUR_GAMES..pid..'.lua', true)
+end)
+if suc and res ~= '404: Not Found' then
+	res = '--This watermark is used to delete the file if its cached, remove it to make the file persist after vape updates.\n'..res
+	writefile(gamePath, res)
+end
+
+-- Hook readfile to auto-download clean game files from our repo (for other PlaceIds)
 local oldReadfile = readfile
 readfile = function(file)
 	local content = oldReadfile(file)
-	if content and file:find('newvape/games/') then
-		if content:find('Bedwars is no longer supported') then
-			local pid = file:match('newvape/games/(.+)%.lua')
-			if pid then
-				local suc, res = pcall(function()
-					return game:HttpGet(OLD_REPO..pid..'.lua', true)
-				end)
-				if suc and res ~= '404: Not Found' then
-					content = res
-					writefile(file, res)
-				end
+	if content and file:find('newvape/games/') and content:find('Bedwars is no longer supported') then
+		local fpid = file:match('newvape/games/(.+)%.lua')
+		if fpid then
+			local ok, newc = pcall(function()
+				return game:HttpGet(OUR_GAMES..fpid..'.lua', true)
+			end)
+			if ok and newc ~= '404: Not Found' then
+				content = newc
+				writefile(file, newc)
 			end
 		end
 	end
 	return content
 end
 
--- Also hook global loadstring as backup
+-- Hook global loadstring as backup
 local oldLoadstring = loadstring
 loadstring = function(text, chunkname)
 	if type(text) == 'string' and text:find('Bedwars is no longer supported') then
