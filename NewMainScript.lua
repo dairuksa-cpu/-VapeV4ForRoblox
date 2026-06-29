@@ -56,12 +56,24 @@ if not shared.VapeDeveloper then
 	writefile('newvape/profiles/commit.txt', commit)
 end
 
--- Hook readfile to strip kick from Bedwars game files before Vape loads them
+-- Hook readfile to auto-download clean game files from our repo
+local OLD_REPO = 'https://raw.githubusercontent.com/dairuksa-cpu/-VapeV4ForRoblox/main/games/'
 local oldReadfile = readfile
 readfile = function(file)
 	local content = oldReadfile(file)
-	if content and (file:find("newvape/games/6872274481") or file:find("newvape/games/6872265039") or file:find("newvape/games/8444591321") or file:find("newvape/games/8560631822")) then
-		content = content:gsub("lplr:Kick%('Bedwars[^']-')", "")
+	if content and file:find('newvape/games/') then
+		if content:find('Bedwars is no longer supported') then
+			local pid = file:match('newvape/games/(.+)%.lua')
+			if pid then
+				local suc, res = pcall(function()
+					return game:HttpGet(OLD_REPO..pid..'.lua', true)
+				end)
+				if suc and res ~= '404: Not Found' then
+					content = res
+					writefile(file, res)
+				end
+			end
+		end
 	end
 	return content
 end
@@ -69,10 +81,8 @@ end
 -- Also hook global loadstring as backup
 local oldLoadstring = loadstring
 loadstring = function(text, chunkname)
-	if type(text) == "string" then
-		if text:find("Bedwars is no longer supported") then
-			text = text:gsub("lplr:Kick%('Bedwars[^']-')", "")
-		end
+	if type(text) == 'string' and text:find('Bedwars is no longer supported') then
+		text = text:gsub("lplr:Kick%Bedwars[^']-')", "")
 	end
 	return oldLoadstring(text, chunkname)
 end
