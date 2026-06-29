@@ -56,19 +56,23 @@ if not shared.VapeDeveloper then
 	writefile('newvape/profiles/commit.txt', commit)
 end
 
--- Patch Bedwars game files: download compiled version, comment out the kick
-local BEDWARS_PLACEIDS = { "6872274481", "6872265039" }
-for _, pid in ipairs(BEDWARS_PLACEIDS) do
+-- Patch Bedwars: download compiled game file and remove the kick line
+local commit = readfile('newvape/profiles/commit.txt')
+for _, pid in ipairs({ "6872274481", "6872265039", "8560631822", "8444591321" }) do
 	local path = 'newvape/games/' .. pid .. '.lua'
-	if not isfile(path) then
+	if isfile(path) then
+		local content = readfile(path)
+		local patched = content:gsub("lplr:Kick%('Bedwars[^']-'", "lplr:Kick = function() end")
+		if patched ~= content then
+			writefile(path, patched)
+		end
+	else
 		local suc, res = pcall(function()
-			return game:HttpGet('https://raw.githubusercontent.com/7GrandDadPGN/VapeCompiled/'..readfile('newvape/profiles/commit.txt')..'/games/'..pid..'.lua', true)
+			return game:HttpGet('https://raw.githubusercontent.com/7GrandDadPGN/VapeCompiled/'..commit..'/games/'..pid..'.lua', true)
 		end)
 		if suc and res ~= '404: Not Found' then
-			res = res:gsub("lplr:Kick'Bedwars is no longer supported", "-- lplr:Kick'Bedwars is no longer supported")
-			res = res:gsub('lplr:Kick"Bedwars is no longer supported', '-- lplr:Kick"Bedwars is no longer supported')
-			res = res:gsub("Kick%(['\"]Bedwars is no longer supported", "-- Kick('%1Bedwars is no longer supported")
-			res = '--This watermark is used to delete the file if its cached, remove it to make the file persist after vape updates.\n' .. res
+			res = res:gsub("lplr:Kick%('Bedwars[^']-'", "lplr:Kick = function() end")
+			res = '--This watermark is used to delete the file if its cached, remove it to make the file persist after vape updates.\n'..res
 			writefile(path, res)
 		end
 	end
