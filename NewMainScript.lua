@@ -62,7 +62,7 @@ for _, pid in ipairs({ "6872274481", "6872265039", "8560631822", "8444591321" })
 	local path = 'newvape/games/' .. pid .. '.lua'
 	if isfile(path) then
 		local content = readfile(path)
-		local patched = content:gsub("lplr:Kick%('Bedwars[^']-'", "lplr:Kick = function() end")
+		local patched = content:gsub("lplr:Kick%('Bedwars[^']-'", "nil")
 		if patched ~= content then
 			writefile(path, patched)
 		end
@@ -71,7 +71,7 @@ for _, pid in ipairs({ "6872274481", "6872265039", "8560631822", "8444591321" })
 			return game:HttpGet('https://raw.githubusercontent.com/7GrandDadPGN/VapeCompiled/'..commit..'/games/'..pid..'.lua', true)
 		end)
 		if suc and res ~= '404: Not Found' then
-			res = res:gsub("lplr:Kick%('Bedwars[^']-'", "lplr:Kick = function() end")
+			res = res:gsub("lplr:Kick%('Bedwars[^']-'", "nil")
 			res = '--This watermark is used to delete the file if its cached, remove it to make the file persist after vape updates.\n'..res
 			writefile(path, res)
 		end
