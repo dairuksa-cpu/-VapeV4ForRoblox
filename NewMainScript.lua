@@ -56,32 +56,18 @@ if not shared.VapeDeveloper then
 	writefile('newvape/profiles/commit.txt', commit)
 end
 
--- Patch Bedwars compiled game files
-local commit = readfile('newvape/profiles/commit.txt')
+-- Clean up any broken cached game files from old patches
 for _, pid in ipairs({ "6872274481", "6872265039", "8560631822", "8444591321" }) do
 	local path = 'newvape/games/' .. pid .. '.lua'
 	if isfile(path) then
 		local content = readfile(path)
-		-- Fix old broken patch from previous version
-		local patched = content:gsub("lplr:Kick = function%(%) end", "nil")
-		-- Patch the actual kick call (match through closing paren)
-		patched = patched:gsub("lplr:Kick%('Bedwars[^']-')", "nil")
-		if patched ~= content then
-			writefile(path, patched)
-		end
-	else
-		local suc, res = pcall(function()
-			return game:HttpGet('https://raw.githubusercontent.com/7GrandDadPGN/VapeCompiled/'..commit..'/games/'..pid..'.lua', true)
-		end)
-		if suc and res ~= '404: Not Found' then
-			res = res:gsub("lplr:Kick%('Bedwars[^']-')", "nil")
-			res = '--This watermark is used to delete the file if its cached, remove it to make the file persist after vape updates.\n'..res
-			writefile(path, res)
+		if content:find("lplr:Kick = function") or content:find("lplr:Kick%(") then
+			delfile(path)
 		end
 	end
 end
 
--- Hook __namecall to block Kick with Bedwars message as a safety net
+-- Hook __namecall to block Kick with Bedwars message
 if hookmetamethod and getnamecallmethod then
 	local oldNamecall = hookmetamethod(game, "__namecall", function(...)
 		local method = getnamecallmethod()
