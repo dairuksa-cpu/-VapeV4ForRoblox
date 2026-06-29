@@ -41,13 +41,17 @@ for _, folder in {'newvape', 'newvape/games', 'newvape/profiles', 'newvape/asset
 end
 
 if not shared.VapeDeveloper then
-	local _, subbed = pcall(function()
-		return game:HttpGet('https://github.com/7GrandDadPGN/VapeCompiled')
-	end)
-	local commit = subbed:find('currentOid')
-	commit = commit and subbed:sub(commit + 13, commit + 52) or nil
-	commit = commit and #commit == 40 and commit or 'main'
-	if commit == 'main' or (isfile('newvape/profiles/commit.txt') and readfile('newvape/profiles/commit.txt') or '') ~= commit then
+	local function tryGetCommit()
+		local suc, page = pcall(game.HttpGet, game, 'https://github.com/7GrandDadPGN/VapeCompiled', true)
+		if not suc or type(page) ~= 'string' then return nil end
+		local idx = page:find('currentOid')
+		if not idx then return nil end
+		local hash = page:sub(idx + 13, idx + 52)
+		if #hash == 40 then return hash end
+		return nil
+	end
+	local commit = tryGetCommit() or 'main'
+	if (isfile('newvape/profiles/commit.txt') and readfile('newvape/profiles/commit.txt') or '') ~= commit then
 		wipeFolder('newvape')
 		wipeFolder('newvape/games')
 		wipeFolder('newvape/guis')
