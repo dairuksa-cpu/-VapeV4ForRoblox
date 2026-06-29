@@ -69,91 +69,16 @@ end
 
 -- Hook __namecall to block Kick with Bedwars message
 if hookmetamethod and getnamecallmethod then
-	local oldNamecall = hookmetamethod(game, "__namecall", function(...)
+	local oldNamecall = hookmetamethod(game, "__namecall", function(self, ...)
 		local method = getnamecallmethod()
 		if method == "Kick" then
-			local args = {...}
-			local msg = args[2]
+			local msg = select(1, ...)
 			if type(msg) == "string" and msg:find("Bedwars") then
 				return
 			end
 		end
-		return oldNamecall(...)
+		return oldNamecall(self, ...)
 	end)
 end
-
--- Bedwars Scaffold module (toggle with G key)
-spawn(function()
-	local player = game.Players.LocalPlayer
-	local mouse = player:GetMouse()
-	local userInput = game:GetService("UserInputService")
-	local runService = game:GetService("RunService")
-	local scaffoldOn = false
-
-	local blockKeywords = {"wool", "stone", "wood", "endstone", "glass", "terracotta", "clay", "ladder", "plank", "oak", "spruce", "birch", "netherrack", "obsidian", "sandstone", "blast"}
-
-	local function isBlockItem(name)
-		local lower = name:lower()
-		for _, kw in ipairs(blockKeywords) do
-			if lower:find(kw) then return true end
-		end
-		return false
-	end
-
-	local function getBlockTool()
-		local char = player.Character
-		if not char then return nil end
-		local held = char:FindFirstChildOfClass("Tool")
-		local backpack = player.Backpack
-		for _, child in ipairs(backpack:GetChildren()) do
-			if child:IsA("Tool") and isBlockItem(child.Name) then
-				return child
-			end
-		end
-		for _, child in ipairs(char:GetChildren()) do
-			if child:IsA("Tool") and isBlockItem(child.Name) then
-				return child
-			end
-		end
-		return held and isBlockItem(held.Name) and held or nil
-	end
-
-	local function placeBlockUnder()
-		local char = player.Character
-		if not char then return end
-		local hrp = char:FindFirstChild("HumanoidRootPart")
-		if not hrp then return end
-		local pos = hrp.Position
-		local below = Vector3.new(math.floor(pos.X + 0.5), math.floor(pos.Y - 1.5), math.floor(pos.Z + 0.5))
-		if workspace:FindPartOnRayWithIgnoreList(Ray.new(below + Vector3.new(0, 3, 0), Vector3.new(0, -5, 0)), {char, workspace:FindFirstChild("Debris")}) then return end
-		local tool = getBlockTool()
-		if not tool then return end
-		if tool.Parent ~= char then
-			char.Humanoid:EquipTool(tool)
-			wait(0.05)
-		end
-		local remote = tool:FindFirstChildWhichIsA("RemoteEvent")
-		if remote then
-			remote:FireServer(CFrame.new(below))
-		else
-			local cd = tool:FindFirstChildWhichIsA("ClickDetector")
-			if cd then
-				fireclickdetector(cd)
-			end
-		end
-	end
-
-	userInput.InputBegan:Connect(function(input, gp)
-		if gp then return end
-		if input.KeyCode == Enum.KeyCode.G then
-			scaffoldOn = not scaffoldOn
-		end
-	end)
-
-	runService.RenderStepped:Connect(function()
-		if not scaffoldOn then return end
-		placeBlockUnder()
-	end)
-end)
 
 return loadstring(downloadFile('newvape/main.lua'), 'main')()
