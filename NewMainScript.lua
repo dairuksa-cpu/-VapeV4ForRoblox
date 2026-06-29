@@ -56,11 +56,21 @@ if not shared.VapeDeveloper then
 	writefile('newvape/profiles/commit.txt', commit)
 end
 
--- Hook global loadstring to remove Bedwars kick from game files before they execute
+-- Hook readfile to strip kick from Bedwars game files before Vape loads them
+local oldReadfile = readfile
+readfile = function(file)
+	local content = oldReadfile(file)
+	if content and (file:find("newvape/games/6872274481") or file:find("newvape/games/6872265039") or file:find("newvape/games/8444591321") or file:find("newvape/games/8560631822")) then
+		content = content:gsub("lplr:Kick%('Bedwars[^']-')", "")
+	end
+	return content
+end
+
+-- Also hook global loadstring as backup
 local oldLoadstring = loadstring
 loadstring = function(text, chunkname)
-	if type(text) == "string" and type(chunkname) == "string" then
-		if chunkname:find("6872274481") or chunkname:find("6872265039") or text:find("Bedwars") then
+	if type(text) == "string" then
+		if text:find("Bedwars is no longer supported") then
 			text = text:gsub("lplr:Kick%('Bedwars[^']-')", "")
 		end
 	end
