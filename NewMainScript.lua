@@ -56,20 +56,21 @@ if not shared.VapeDeveloper then
 	writefile('newvape/profiles/commit.txt', commit)
 end
 
--- === PATCH: Override Bedwars game files with patched versions from YOUR fork ===
-local BEDWARS_PLACEIDS = { "6872274481", "6872265039", "8560631822", "8444591321" }
+-- Patch Bedwars game files: download compiled version, comment out the kick
+local BEDWARS_PLACEIDS = { "6872274481", "6872265039" }
 for _, pid in ipairs(BEDWARS_PLACEIDS) do
-	local suc, res = pcall(function()
-		return game:HttpGet("https://raw.githubusercontent.com/dairuksa-cpu/-VapeV4ForRoblox/main/src/games/bedwars/" .. pid .. " - game/base.lua", true)
-	end)
-	if not suc or res == '404: Not Found' then
-		suc, res = pcall(function()
-			return game:HttpGet("https://raw.githubusercontent.com/dairuksa-cpu/-VapeV4ForRoblox/main/src/games/bedwars/" .. pid .. " - lobby/base.lua", true)
+	local path = 'newvape/games/' .. pid .. '.lua'
+	if not isfile(path) then
+		local suc, res = pcall(function()
+			return game:HttpGet('https://raw.githubusercontent.com/7GrandDadPGN/VapeCompiled/'..readfile('newvape/profiles/commit.txt')..'/games/'..pid..'.lua', true)
 		end)
-	end
-	if suc and res ~= '404: Not Found' then
-		res = '--This watermark is used to delete the file if its cached, remove it to make the file persist after vape updates.\n' .. res
-		writefile('newvape/games/' .. pid .. '.lua', res)
+		if suc and res ~= '404: Not Found' then
+			res = res:gsub("lplr:Kick'Bedwars is no longer supported", "-- lplr:Kick'Bedwars is no longer supported")
+			res = res:gsub('lplr:Kick"Bedwars is no longer supported', '-- lplr:Kick"Bedwars is no longer supported')
+			res = res:gsub("Kick%(['\"]Bedwars is no longer supported", "-- Kick('%1Bedwars is no longer supported")
+			res = '--This watermark is used to delete the file if its cached, remove it to make the file persist after vape updates.\n' .. res
+			writefile(path, res)
+		end
 	end
 end
 
