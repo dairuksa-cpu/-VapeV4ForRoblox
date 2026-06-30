@@ -1,21 +1,17 @@
--- Hook readfile to strip kick when Vape reads game configs
-local delfile = delfile or function(file) writefile(file, '') end
-
 for _, folder in {'newvape/games', 'newvape/profiles', 'newvape/assets', 'newvape/libraries', 'newvape/guis'} do
 	if not isfolder(folder) then makefolder(folder) end
 end
 
--- Strip kick from game configs when they're read (guaranteed intercept)
-local origReadfile = readfile
-readfile = function(path)
-	local content = origReadfile(path)
-	if path and type(path) == 'string' and path:find('newvape/games/') and content then
-		content = content:gsub("lplr:Kick%b()", "")
+-- Hook loadstring: strip lplr:Kick from game configs right before compilation
+local origLoadstring = loadstring
+loadstring = function(str, chunkname)
+	if type(str) == "string" and chunkname and chunkname == tostring(game.PlaceId) then
+		str = str:gsub("lplr:Kick%b()", "")
 	end
-	return content
+	return origLoadstring(str, chunkname)
 end
 
--- Hook require: use getscriptbytecode + loadstring for game modules
+-- Hook require: use setthreadidentity + bytecode fallback + graceful proxy
 local moduleCache = setmetatable({}, {__mode = 'v'})
 local origRequire = require
 require = function(mod)
