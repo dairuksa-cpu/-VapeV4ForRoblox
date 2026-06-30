@@ -1,16 +1,21 @@
--- Minimal script: original Vape flow + kick removal via gsub + require fix for executor
-
-local isfile = isfile or function(file)
-	local suc, res = pcall(function() return readfile(file) end)
-	return suc and res ~= nil and res ~= ''
-end
+-- Hook readfile to strip kick when Vape reads game configs
 local delfile = delfile or function(file) writefile(file, '') end
 
 for _, folder in {'newvape/games', 'newvape/profiles', 'newvape/assets', 'newvape/libraries', 'newvape/guis'} do
 	if not isfolder(folder) then makefolder(folder) end
 end
 
--- Hook require: try identity trick, then bytecode, finally return a proxy to prevent crashes
+-- Strip kick from game configs when they're read (guaranteed intercept)
+local origReadfile = readfile
+readfile = function(path)
+	local content = origReadfile(path)
+	if path and type(path) == 'string' and path:find('newvape/games/') and content then
+		content = content:gsub("lplr:Kick%b()", "")
+	end
+	return content
+end
+
+-- Hook require: use getscriptbytecode + loadstring for game modules
 local moduleCache = setmetatable({}, {__mode = 'v'})
 local origRequire = require
 require = function(mod)
@@ -29,27 +34,12 @@ require = function(mod)
 			if suc3 then moduleCache[mod] = res3; return res3 end
 		end
 	end
-	-- Return graceful proxy so game config doesn't crash
-	local proxy = {}
-	setmetatable(proxy, {
+	local proxy = setmetatable({}, {
 		__index = function() return function() end end,
 		__call = function() return proxy end
 	})
 	moduleCache[mod] = proxy
 	return proxy
-end
-
--- Pre-download game config with kick stripped
-local pid = tostring(game.PlaceId)
-if pid ~= '0' then
-	local gpath = 'newvape/games/'..pid..'.lua'
-	local suc, res = pcall(function()
-		return game:HttpGet('https://raw.githubusercontent.com/7GrandDadPGN/VapeCompiled/main/games/'..pid..'.lua', true)
-	end)
-	if suc and res and res ~= '404: Not Found' then
-		res = res:gsub("lplr:Kick%b()", "")
-		writefile(gpath, '--This watermark is used to delete the file if its cached, remove it to make the file persist after vape updates.\n'..res)
-	end
 end
 
 -- Download main.lua from VapeCompiled
