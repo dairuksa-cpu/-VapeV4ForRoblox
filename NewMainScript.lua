@@ -4,6 +4,7 @@ end
 writefile('newvape/profiles/commit.txt', 'main')
 
 _G.__vapeModCache = setmetatable({}, {__mode = 'v'})
+
 getgenv().__vape_require = function(mod)
 	local cache = _G.__vapeModCache
 	if cache[mod] then return cache[mod] end
@@ -33,14 +34,18 @@ getgenv().__vape_require = function(mod)
 	return proxy
 end
 
+-- Delete stale game config file (from old versions with conflicting wrappers)
 local placeId = tostring(game.PlaceId)
 local path = 'newvape/games/'..placeId..'.lua'
 if isfile(path) then
 	local c = readfile(path)
-	c = c:gsub("lplr:Kick%b()", "")
-	c = c:gsub("require%(", "__vape_require(")
-	writefile(path, c)
-else
+	if c:find("__vape_orig_require") or c:find("_vr") or c:find("vape_require_injected") then
+		pcall(delfile, path)
+	end
+end
+
+-- Download fresh game config, strip kick, replace require( -> __vape_require(
+if not isfile(path) then
 	local suc, r = pcall(game.HttpGet, game, 'https://raw.githubusercontent.com/7GrandDadPGN/VapeCompiled/main/games/'..placeId..'.lua', true)
 	if suc and type(r) == 'string' and not r:find('404') then
 		r = r:gsub("lplr:Kick%b()", "")
