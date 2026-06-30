@@ -6,15 +6,71 @@ if not isfile('newvape/profiles/commit.txt') then
 	writefile('newvape/profiles/commit.txt', 'main')
 end
 
--- Pre-download & strip kick from game config before Vape runs
 local placeId = tostring(game.PlaceId)
 local gameConfigPath = 'newvape/games/'..placeId..'.lua'
 local commit = readfile('newvape/profiles/commit.txt')
 
+-- Shared module cache (lives in _G so the injected wrapper can access it)
+_G.__vapeModCache = setmetatable({}, {__mode = 'v'})
+
+-- Pre-download game config, strip kick, inject require wrapper
+local function buildGameConfig(content)
+	-- Strip kick
+	if content:find("lplr:Kick") then
+		content = content:gsub("lplr:Kick%b()", "")
+	end
+
+	-- Inject require wrapper at the TOP of the file as a local variable.
+	-- All nested functions inside this chunk will capture it as an upvalue.
+	local wrapper = [[
+local __vape_orig_require = require
+local __vape_require = function(mod)
+	local cache = _G.__vapeModCache
+	if cache[mod] then return cache[mod] end
+
+	local suc, res = pcall(__vape_orig_require, mod)
+	if suc then cache[mod] = res; return res end
+
+	local oldId = getthreadidentity()
+	setthreadidentity(2)
+	suc, res = pcall(__vape_orig_require, mod)
+	setthreadidentity(oldId)
+	if suc then cache[mod] = res; return res end
+
+	local suc2, bc = pcall(getscriptbytecode, mod)
+	if suc2 and bc and #bc > 0 then
+		local fn = loadstring(bc)
+		if fn then
+			suc, res = pcall(fn)
+			if suc then cache[mod] = res; return res end
+		end
+		local src = decompile(mod)
+		if src and #src > 0 then
+			local fn2 = loadstring(src)
+			if fn2 then
+				suc, res = pcall(fn2)
+				if suc then cache[mod] = res; return res end
+			end
+		end
+	end
+
+	local proxy = setmetatable({}, {
+		__index = function() return function() end end,
+		__call = function() return proxy end
+	})
+	cache[mod] = proxy
+	return proxy
+end
+local require = __vape_require
+]]
+
+	return wrapper .. content
+end
+
 if isfile(gameConfigPath) then
 	local content = readfile(gameConfigPath)
-	if content and content:find("lplr:Kick") then
-		content = content:gsub("lplr:Kick%b()", "")
+	if content:find("lplr:Kick") or not content:find("__vape_require") then
+		content = buildGameConfig(content)
 		writefile(gameConfigPath, content)
 	end
 else
@@ -22,74 +78,11 @@ else
 		return game:HttpGet('https://raw.githubusercontent.com/7GrandDadPGN/VapeCompiled/'..commit..'/games/'..placeId..'.lua', true)
 	end)
 	if suc and res and not res:find('404') then
-		if res:find("lplr:Kick") then
-			res = res:gsub("lplr:Kick%b()", "")
-		end
+		res = buildGameConfig(res)
 		writefile(gameConfigPath, '--This watermark is used to delete the file if its cached, remove it to make the file persist after vape updates.\n'..res)
 	end
 end
 
--- Hook require via hookfunction (C-level, can't be silently ignored)
-local moduleCache = setmetatable({}, {__mode = 'v'})
-local origRequire = hookfunction(require, function(mod)
-	if moduleCache[mod] then return moduleCache[mod] end
-
-	-- Try 1: normal require (works for most modules)
-	local suc, res = pcall(origRequire, mod)
-	if suc then moduleCache[mod] = res; return res end
-
-	-- Try 2: setthreadidentity(2) + require
-	local oldId = getthreadidentity()
-	setthreadidentity(2)
-	local suc2, res2 = pcall(origRequire, mod)
-	setthreadidentity(oldId)
-	if suc2 then moduleCache[mod] = res2; return res2 end
-
-	-- Try 3: getscriptbytecode + loadstring
-	local suc3, bc = pcall(getscriptbytecode, mod)
-	if suc3 and bc and #bc > 0 then
-		local fn = loadstring(bc)
-		if fn then
-			local suc4, res4 = pcall(fn)
-			if suc4 then moduleCache[mod] = res4; return res4 end
-		end
-		local src = decompile(mod)
-		if src and #src > 0 then
-			local fn2 = loadstring(src)
-			if fn2 then
-				local suc4, res4 = pcall(fn2)
-				if suc4 then moduleCache[mod] = res4; return res4 end
-			end
-		end
-	end
-
-	-- Proxy fallback (keeps Vape from crashing, features get stubs)
-	local proxy = setmetatable({}, {
-		__index = function() return function() end end,
-		__call = function() return proxy end
-	})
-	moduleCache[mod] = proxy
-	return proxy
-end)
-
--- Hook loadstring (backup defense)
-local origLoadstring = hookfunction(loadstring, function(str, chunkname)
-	if type(str) == "string" and str:find("lplr:Kick") then
-		str = str:gsub("lplr:Kick%b()", "")
-	end
-	return origLoadstring(str, chunkname)
-end)
-
--- Hook readfile (backup defense)
-local origReadfile = hookfunction(readfile, function(path)
-	local content = origReadfile(path)
-	if type(content) == "string" and content:find("lplr:Kick") then
-		content = content:gsub("lplr:Kick%b()", "")
-	end
-	return content
-end)
-
--- Download & run Vape's main.lua
 local function downloadVapeFile(path)
 	if not isfile(path) then
 		local suc, res = pcall(function()
