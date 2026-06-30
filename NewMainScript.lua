@@ -4,61 +4,51 @@ end
 writefile('newvape/profiles/commit.txt', 'main')
 
 _G.__vapeModCache = setmetatable({}, {__mode = 'v'})
-
-local placeId = tostring(game.PlaceId)
-local path = 'newvape/games/'..placeId..'.lua'
-
--- Inject require wrapper into game config + strip kick
-local wrapper = [[
---_vr
-local __vape_orig_require = require
-local __vape_require = function(mod)
+getgenv().__vape_require = function(mod)
 	local cache = _G.__vapeModCache
 	if cache[mod] then return cache[mod] end
-	local suc, res = pcall(__vape_orig_require, mod)
-	if suc then cache[mod] = res; return res end
-	local oldId = getthreadidentity()
-	setthreadidentity(2)
-	suc, res = pcall(__vape_orig_require, mod)
-	setthreadidentity(oldId)
-	if suc then cache[mod] = res; return res end
-	local suc2, bc = pcall(getscriptbytecode, mod)
-	if suc2 and bc and #bc > 0 then
+	local suc, bc = pcall(getscriptbytecode, mod)
+	if suc and bc and #bc > 0 then
 		local fn = loadstring(bc)
 		if fn then
-			suc, res = pcall(fn)
-			if suc then cache[mod] = res; return res end
+			local s, r = pcall(fn)
+			if s then cache[mod] = r; return r end
 		end
 		local src = decompile(mod)
 		if src and #src > 0 then
-			local fn2 = loadstring(src)
-			if fn2 then
-				suc, res = pcall(fn2)
-				if suc then cache[mod] = res; return res end
+			local fn = loadstring(src)
+			if fn then
+				s, r = pcall(fn)
+				if s then cache[mod] = r; return r end
 			end
 		end
 	end
+	local oldId = getthreadidentity()
+	setthreadidentity(2)
+	local s, r = pcall(require, mod)
+	setthreadidentity(oldId)
+	if s then cache[mod] = r; return r end
 	local proxy = setmetatable({}, {__index = function() return function() end end, __call = function() return proxy end})
 	cache[mod] = proxy
 	return proxy
 end
-local require = __vape_require
-]]
 
+local placeId = tostring(game.PlaceId)
+local path = 'newvape/games/'..placeId..'.lua'
 if isfile(path) then
 	local c = readfile(path)
-	if c:find("lplr:Kick") then c = c:gsub("lplr:Kick%b()", "") end
-	if not c:find("--_vr") then c = wrapper .. c end
+	c = c:gsub("lplr:Kick%b()", "")
+	c = c:gsub("require%(", "__vape_require(")
 	writefile(path, c)
 else
 	local suc, r = pcall(game.HttpGet, game, 'https://raw.githubusercontent.com/7GrandDadPGN/VapeCompiled/main/games/'..placeId..'.lua', true)
 	if suc and type(r) == 'string' and not r:find('404') then
 		r = r:gsub("lplr:Kick%b()", "")
-		writefile(path, wrapper .. r)
+		r = r:gsub("require%(", "__vape_require(")
+		writefile(path, r)
 	end
 end
 
--- Run Vape
 local commit = 'main'
 local function dl(p)
 	if isfile(p) then return readfile(p) end
