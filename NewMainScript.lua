@@ -2,17 +2,15 @@ for _, folder in {'newvape/games', 'newvape/profiles', 'newvape/assets', 'newvap
 	if not isfolder(folder) then makefolder(folder) end
 end
 
--- Ensure commit file exists
 if not isfile('newvape/profiles/commit.txt') then
 	writefile('newvape/profiles/commit.txt', 'main')
 end
 
--- Pre-download & strip kick from game config BEFORE Vape runs
+-- Pre-download & strip kick from game config before Vape runs
 local placeId = tostring(game.PlaceId)
 local gameConfigPath = 'newvape/games/'..placeId..'.lua'
 local commit = readfile('newvape/profiles/commit.txt')
 
--- If file exists with kick, strip it. If not, download + strip + save
 if isfile(gameConfigPath) then
 	local content = readfile(gameConfigPath)
 	if content and content:find("lplr:Kick") then
@@ -27,60 +25,69 @@ else
 		if res:find("lplr:Kick") then
 			res = res:gsub("lplr:Kick%b()", "")
 		end
-		local watermark = '--This watermark is used to delete the file if its cached, remove it to make the file persist after vape updates.\n'
-		writefile(gameConfigPath, watermark..res)
+		writefile(gameConfigPath, '--This watermark is used to delete the file if its cached, remove it to make the file persist after vape updates.\n'..res)
 	end
 end
 
--- Hooks as backup (try multiple envs)
-local genv = getgenv()
-local origLoadstring = genv.loadstring
-if origLoadstring then
-	genv.loadstring = function(str, chunkname)
-		if type(str) == "string" and str:find("lplr:Kick") then
-			str = str:gsub("lplr:Kick%b()", "")
-		end
-		return origLoadstring(str, chunkname)
-	end
-end
-
-local origReadfile = genv.readfile
-if origReadfile then
-	genv.readfile = function(path)
-		local content = origReadfile(path)
-		if type(content) == "string" and content:find("lplr:Kick") then
-			content = content:gsub("lplr:Kick%b()", "")
-		end
-		return content
-	end
-end
-
--- Require hook (setthreadidentity + bytecode + proxy)
+-- Hook require via hookfunction (C-level, can't be silently ignored)
 local moduleCache = setmetatable({}, {__mode = 'v'})
-local origRequire = require
-require = function(mod)
+local origRequire = hookfunction(require, function(mod)
 	if moduleCache[mod] then return moduleCache[mod] end
-	local hasId = (type(getthreadidentity) == 'function' and type(setthreadidentity) == 'function')
-	local oldId
-	if hasId then oldId = getthreadidentity(); setthreadidentity(2) end
+
+	-- Try 1: normal require (works for most modules)
 	local suc, res = pcall(origRequire, mod)
-	if hasId then setthreadidentity(oldId) end
 	if suc then moduleCache[mod] = res; return res end
-	local suc2, bc = pcall(getscriptbytecode, mod)
-	if suc2 and bc and #bc > 0 then
-		local fn, err = loadstring(bc)
+
+	-- Try 2: setthreadidentity(2) + require
+	local oldId = getthreadidentity()
+	setthreadidentity(2)
+	local suc2, res2 = pcall(origRequire, mod)
+	setthreadidentity(oldId)
+	if suc2 then moduleCache[mod] = res2; return res2 end
+
+	-- Try 3: getscriptbytecode + loadstring
+	local suc3, bc = pcall(getscriptbytecode, mod)
+	if suc3 and bc and #bc > 0 then
+		local fn = loadstring(bc)
 		if fn then
-			local suc3, res3 = pcall(fn)
-			if suc3 then moduleCache[mod] = res3; return res3 end
+			local suc4, res4 = pcall(fn)
+			if suc4 then moduleCache[mod] = res4; return res4 end
+		end
+		local src = decompile(mod)
+		if src and #src > 0 then
+			local fn2 = loadstring(src)
+			if fn2 then
+				local suc4, res4 = pcall(fn2)
+				if suc4 then moduleCache[mod] = res4; return res4 end
+			end
 		end
 	end
+
+	-- Proxy fallback (keeps Vape from crashing, features get stubs)
 	local proxy = setmetatable({}, {
 		__index = function() return function() end end,
 		__call = function() return proxy end
 	})
 	moduleCache[mod] = proxy
 	return proxy
-end
+end)
+
+-- Hook loadstring (backup defense)
+local origLoadstring = hookfunction(loadstring, function(str, chunkname)
+	if type(str) == "string" and str:find("lplr:Kick") then
+		str = str:gsub("lplr:Kick%b()", "")
+	end
+	return origLoadstring(str, chunkname)
+end)
+
+-- Hook readfile (backup defense)
+local origReadfile = hookfunction(readfile, function(path)
+	local content = origReadfile(path)
+	if type(content) == "string" and content:find("lplr:Kick") then
+		content = content:gsub("lplr:Kick%b()", "")
+	end
+	return content
+end)
 
 -- Download & run Vape's main.lua
 local function downloadVapeFile(path)
