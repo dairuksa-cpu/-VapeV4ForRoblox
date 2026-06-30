@@ -13,8 +13,10 @@ _G.__vapeModCache = setmetatable({}, {__mode = 'v'})
 local commit = 'main'
 local function dl(p)
 	if isfile(p) then return readfile(p) end
-	local r = game:HttpGet('https://raw.githubusercontent.com/7GrandDadPGN/VapeCompiled/'..commit..'/'..p:gsub('newvape/', ''), true)
+	local suc, r = pcall(game.HttpGet, game, 'https://raw.githubusercontent.com/7GrandDadPGN/VapeCompiled/'..commit..'/'..p:gsub('newvape/', ''), true)
+	if not suc or type(r) ~= 'string' then error('DL failed: '..p..' - '..tostring(r)) end
 	writefile(p, r)
 	return r
 end
-return loadstring(dl('newvape/main.lua'), 'main')()
+local suc, fn = pcall(loadstring, dl('newvape/main.lua'), 'main')
+if suc and fn then return fn() end
