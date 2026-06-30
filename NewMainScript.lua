@@ -4,7 +4,7 @@ end
 
 local delfile = delfile or function(file) writefile(file, '') end
 
--- Delete stale VapeV4ForRoblox cached files AND any cached game config that still has a kick
+-- Purge any stale cached files containing kick or VapeV4ForRoblox
 for _, dir in {'newvape/games', 'newvape/main.lua', 'newvape/libraries'} do
 	if isfile(dir) then
 		local c = readfile(dir)
@@ -19,15 +19,12 @@ for _, dir in {'newvape/games', 'newvape/main.lua', 'newvape/libraries'} do
 	end
 end
 
--- Hook require: try setthreadidentity if available, fallback to bytecode
+-- Hook require: try setthreadidentity, fallback to bytecode
 local origRequire = require
 require = function(mod)
 	local oldId
-	local hasId = (type(getthreadidentity) == 'function')
-	if hasId then
-		oldId = getthreadidentity()
-		setthreadidentity(2)
-	end
+	local hasId = (type(getthreadidentity) == 'function' and type(setthreadidentity) == 'function')
+	if hasId then oldId = getthreadidentity(); setthreadidentity(2) end
 	local suc, res = pcall(origRequire, mod)
 	if hasId then setthreadidentity(oldId) end
 	if suc then return res end
@@ -42,7 +39,16 @@ require = function(mod)
 	error(res)
 end
 
--- Download game config fresh every time, strip any kick from source
+-- Hook loadstring: strip kick from game configs right before Vape executes them
+local origLoadstring = loadstring
+loadstring = function(str, chunkname)
+	if chunkname and type(str) == 'string' and str:find('lplr:Kick') then
+		str = str:gsub("lplr:Kick%b()", "")
+	end
+	return origLoadstring(str, chunkname)
+end
+
+-- Force download game config fresh each time, strip any kick from source
 local pid = tostring(game.PlaceId)
 if pid ~= '0' then
 	local gpath = 'newvape/games/'..pid..'.lua'
@@ -50,12 +56,8 @@ if pid ~= '0' then
 		return game:HttpGet('https://raw.githubusercontent.com/7GrandDadPGN/VapeCompiled/main/games/'..pid..'.lua', true)
 	end)
 	if suc and res and res ~= '404: Not Found' then
-		-- Strip lplr:Kick with any argument from source (guaranteed removal)
 		res = res:gsub("lplr:Kick%b()", "")
 		res = res:gsub("lplr:Kick%b()", "")
-		-- Also strip any other form of Kick call with Bedwars
-		res = res:gsub("playersService%.LocalPlayer:Kick%b()", "")
-		res = res:gsub("Players%.LocalPlayer:Kick%b()", "")
 		writefile(gpath, '--This watermark is used to delete the file if its cached, remove it to make the file persist after vape updates.\n'..res)
 	end
 end
@@ -70,7 +72,26 @@ end
 writefile('newvape/main.lua', '--This watermark is used to delete the file if its cached, remove it to make the file persist after vape updates.\n'..res)
 writefile('newvape/profiles/commit.txt', 'main')
 
--- Load Vape inside pcall so game config errors don't crash everything
+-- Backup: __namecall hook directly on lplr
+if hookmetamethod and getnamecallmethod then
+	local lplr = game:GetService('Players').LocalPlayer
+	if lplr then
+		local old = hookmetamethod(lplr, "__namecall", function(...)
+			local method = getnamecallmethod()
+			if method == "Kick" then
+				local args = {...}
+				for i = 1, #args do
+					if type(args[i]) == "string" and args[i]:find("Bedwars") then
+						return
+					end
+				end
+			end
+			return old(...)
+		end)
+	end
+end
+
+-- Load Vape inside pcall
 local fn, loadErr = loadstring(readfile('newvape/main.lua'), 'main')
 if not fn then error('Failed to compile main.lua: ' .. tostring(loadErr)) end
 local suc, result = pcall(fn)
