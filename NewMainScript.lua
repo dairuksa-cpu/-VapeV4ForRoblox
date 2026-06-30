@@ -2,16 +2,29 @@ for _, folder in {'newvape/games', 'newvape/profiles', 'newvape/assets', 'newvap
 	if not isfolder(folder) then makefolder(folder) end
 end
 
--- Hook loadstring: strip lplr:Kick from game configs right before compilation
-local origLoadstring = loadstring
-loadstring = function(str, chunkname)
-	if type(str) == "string" and chunkname and chunkname == tostring(game.PlaceId) then
+-- Strip kick from game configs at EVERY possible intercept point
+local genv = getgenv()
+
+-- 1) Hook loadstring: strip kick right before compilation
+local origLoadstring = genv.loadstring
+genv.loadstring = function(str, chunkname)
+	if type(str) == "string" and str:find("lplr:Kick") then
 		str = str:gsub("lplr:Kick%b()", "")
 	end
 	return origLoadstring(str, chunkname)
 end
 
--- Hook require: use setthreadidentity + bytecode fallback + graceful proxy
+-- 2) Hook readfile: strip kick when read from disk
+local origReadfile = genv.readfile
+genv.readfile = function(path)
+	local content = origReadfile(path)
+	if type(path) == "string" and path:find("newvape/games/") and content and content:find("lplr:Kick") then
+		content = content:gsub("lplr:Kick%b()", "")
+	end
+	return content
+end
+
+-- Hook require: try setthreadidentity, bytecode, then graceful proxy
 local moduleCache = setmetatable({}, {__mode = 'v'})
 local origRequire = require
 require = function(mod)
