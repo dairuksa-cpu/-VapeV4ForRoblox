@@ -10,7 +10,7 @@ for _, folder in {'newvape/games', 'newvape/profiles', 'newvape/assets', 'newvap
 	if not isfolder(folder) then makefolder(folder) end
 end
 
--- Hook require: for game modules, use getscriptbytecode + loadstring
+-- Hook require: try identity trick, then bytecode, finally return a proxy to prevent crashes
 local moduleCache = setmetatable({}, {__mode = 'v'})
 local origRequire = require
 require = function(mod)
@@ -29,7 +29,14 @@ require = function(mod)
 			if suc3 then moduleCache[mod] = res3; return res3 end
 		end
 	end
-	error(res)
+	-- Return graceful proxy so game config doesn't crash
+	local proxy = {}
+	setmetatable(proxy, {
+		__index = function() return function() end end,
+		__call = function() return proxy end
+	})
+	moduleCache[mod] = proxy
+	return proxy
 end
 
 -- Pre-download game config with kick stripped
