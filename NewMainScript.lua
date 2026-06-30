@@ -4,28 +4,32 @@ end
 
 local delfile = delfile or function(file) writefile(file, '') end
 
--- Purge stale VapeV4ForRoblox cached files
-local function purgeFile(file)
-	if isfile(file) then
-		local c = readfile(file)
-		if c and c:find('VapeV4ForRoblox') then delfile(file) end
+-- Delete stale VapeV4ForRoblox cached files AND any cached game config that still has a kick
+for _, dir in {'newvape/games', 'newvape/main.lua', 'newvape/libraries'} do
+	if isfile(dir) then
+		local c = readfile(dir)
+		if c and (c:find('VapeV4ForRoblox') or c:find('lplr:Kick')) then delfile(dir) end
+	elseif isfolder(dir) then
+		for _, f in listfiles(dir) do
+			if isfile(f) then
+				local c = readfile(f)
+				if c and (c:find('VapeV4ForRoblox') or c:find('lplr:Kick')) then delfile(f) end
+			end
+		end
 	end
 end
-purgeFile('newvape/main.lua')
-if isfolder('newvape/games') then
-	for _, f in listfiles('newvape/games') do if isfile(f) then purgeFile(f) end end
-end
-if isfolder('newvape/libraries') then
-	for _, f in listfiles('newvape/libraries') do if isfile(f) then purgeFile(f) end end
-end
 
--- Hook require with setthreadidentity to bypass executor's RobloxScript restriction
+-- Hook require: try setthreadidentity if available, fallback to bytecode
 local origRequire = require
 require = function(mod)
-	local oldId = getthreadidentity()
-	setthreadidentity(2)
+	local oldId
+	local hasId = (type(getthreadidentity) == 'function')
+	if hasId then
+		oldId = getthreadidentity()
+		setthreadidentity(2)
+	end
 	local suc, res = pcall(origRequire, mod)
-	setthreadidentity(oldId)
+	if hasId then setthreadidentity(oldId) end
 	if suc then return res end
 	local suc2, bc = pcall(getscriptbytecode, mod)
 	if suc2 and bc and #bc > 0 then
@@ -38,24 +42,25 @@ require = function(mod)
 	error(res)
 end
 
--- Download game config from VapeCompiled and strip Bedwars kick from source
+-- Download game config fresh every time, strip any kick from source
 local pid = tostring(game.PlaceId)
 if pid ~= '0' then
 	local gpath = 'newvape/games/'..pid..'.lua'
-	if not isfile(gpath) then
-		local suc, res = pcall(function()
-			return game:HttpGet('https://raw.githubusercontent.com/7GrandDadPGN/VapeCompiled/main/games/'..pid..'.lua', true)
-		end)
-		if suc and res and res ~= '404: Not Found' then
-			-- Strip lplr:Kick('Bedwars...') from source so it never executes
-			res = res:gsub("lplr:Kick%B%(%)", "")
-			res = res:gsub("lplr:Kick%B%(%)", "")
-			writefile(gpath, '--This watermark is used to delete the file if its cached, remove it to make the file persist after vape updates.\n'..res)
-		end
+	local suc, res = pcall(function()
+		return game:HttpGet('https://raw.githubusercontent.com/7GrandDadPGN/VapeCompiled/main/games/'..pid..'.lua', true)
+	end)
+	if suc and res and res ~= '404: Not Found' then
+		-- Strip lplr:Kick with any argument from source (guaranteed removal)
+		res = res:gsub("lplr:Kick%b()", "")
+		res = res:gsub("lplr:Kick%b()", "")
+		-- Also strip any other form of Kick call with Bedwars
+		res = res:gsub("playersService%.LocalPlayer:Kick%b()", "")
+		res = res:gsub("Players%.LocalPlayer:Kick%b()", "")
+		writefile(gpath, '--This watermark is used to delete the file if its cached, remove it to make the file persist after vape updates.\n'..res)
 	end
 end
 
--- Fresh main.lua from VapeCompiled every time
+-- Fresh main.lua every time
 local suc, res = pcall(function()
 	return game:HttpGet('https://raw.githubusercontent.com/7GrandDadPGN/VapeCompiled/main/main.lua', true)
 end)
@@ -65,7 +70,7 @@ end
 writefile('newvape/main.lua', '--This watermark is used to delete the file if its cached, remove it to make the file persist after vape updates.\n'..res)
 writefile('newvape/profiles/commit.txt', 'main')
 
--- Load Vape inside pcall so errors don't crash everything
+-- Load Vape inside pcall so game config errors don't crash everything
 local fn, loadErr = loadstring(readfile('newvape/main.lua'), 'main')
 if not fn then error('Failed to compile main.lua: ' .. tostring(loadErr)) end
 local suc, result = pcall(fn)
