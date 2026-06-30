@@ -2,29 +2,60 @@ for _, folder in {'newvape/games', 'newvape/profiles', 'newvape/assets', 'newvap
 	if not isfolder(folder) then makefolder(folder) end
 end
 
--- Strip kick from game configs at EVERY possible intercept point
-local genv = getgenv()
-
--- 1) Hook loadstring: strip kick right before compilation
-local origLoadstring = genv.loadstring
-genv.loadstring = function(str, chunkname)
-	if type(str) == "string" and str:find("lplr:Kick") then
-		str = str:gsub("lplr:Kick%b()", "")
-	end
-	return origLoadstring(str, chunkname)
+-- Ensure commit file exists
+if not isfile('newvape/profiles/commit.txt') then
+	writefile('newvape/profiles/commit.txt', 'main')
 end
 
--- 2) Hook readfile: strip kick when read from disk
-local origReadfile = genv.readfile
-genv.readfile = function(path)
-	local content = origReadfile(path)
-	if type(path) == "string" and path:find("newvape/games/") and content and content:find("lplr:Kick") then
+-- Pre-download & strip kick from game config BEFORE Vape runs
+local placeId = tostring(game.PlaceId)
+local gameConfigPath = 'newvape/games/'..placeId..'.lua'
+local commit = readfile('newvape/profiles/commit.txt')
+
+-- If file exists with kick, strip it. If not, download + strip + save
+if isfile(gameConfigPath) then
+	local content = readfile(gameConfigPath)
+	if content and content:find("lplr:Kick") then
 		content = content:gsub("lplr:Kick%b()", "")
+		writefile(gameConfigPath, content)
 	end
-	return content
+else
+	local suc, res = pcall(function()
+		return game:HttpGet('https://raw.githubusercontent.com/7GrandDadPGN/VapeCompiled/'..commit..'/games/'..placeId..'.lua', true)
+	end)
+	if suc and res and not res:find('404') then
+		if res:find("lplr:Kick") then
+			res = res:gsub("lplr:Kick%b()", "")
+		end
+		local watermark = '--This watermark is used to delete the file if its cached, remove it to make the file persist after vape updates.\n'
+		writefile(gameConfigPath, watermark..res)
+	end
 end
 
--- Hook require: try setthreadidentity, bytecode, then graceful proxy
+-- Hooks as backup (try multiple envs)
+local genv = getgenv()
+local origLoadstring = genv.loadstring
+if origLoadstring then
+	genv.loadstring = function(str, chunkname)
+		if type(str) == "string" and str:find("lplr:Kick") then
+			str = str:gsub("lplr:Kick%b()", "")
+		end
+		return origLoadstring(str, chunkname)
+	end
+end
+
+local origReadfile = genv.readfile
+if origReadfile then
+	genv.readfile = function(path)
+		local content = origReadfile(path)
+		if type(content) == "string" and content:find("lplr:Kick") then
+			content = content:gsub("lplr:Kick%b()", "")
+		end
+		return content
+	end
+end
+
+-- Require hook (setthreadidentity + bytecode + proxy)
 local moduleCache = setmetatable({}, {__mode = 'v'})
 local origRequire = require
 require = function(mod)
@@ -51,10 +82,9 @@ require = function(mod)
 	return proxy
 end
 
--- Download main.lua from VapeCompiled
-local function downloadFile(path, func)
+-- Download & run Vape's main.lua
+local function downloadVapeFile(path)
 	if not isfile(path) then
-		local commit = (isfile('newvape/profiles/commit.txt') and readfile('newvape/profiles/commit.txt')) or 'main'
 		local suc, res = pcall(function()
 			return game:HttpGet('https://raw.githubusercontent.com/7GrandDadPGN/VapeCompiled/'..commit..'/'..select(1, path:gsub('newvape/', '')), true)
 		end)
@@ -64,8 +94,7 @@ local function downloadFile(path, func)
 		end
 		writefile(path, res)
 	end
-	return (func or readfile)(path)
+	return readfile(path)
 end
-writefile('newvape/profiles/commit.txt', 'main')
 
-return loadstring(downloadFile('newvape/main.lua'), 'main')()
+return loadstring(downloadVapeFile('newvape/main.lua'), 'main')()
